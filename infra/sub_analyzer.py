@@ -3,53 +3,53 @@ from google.cloud import pubsub_v1
 from google.cloud import monitoring_v3
 from datetime import datetime, timezone, timedelta
 
-def analizar_suscripciones_finops(project_id, topic_path):
-    print(f"Iniciando análisis FinOps en el proyecto: {project_id}...")
-    print(f"Tema objetivo: {topic_path}\n")
+def analyze_subscriptions_finops(project_id, topic_path):
+    print(f"Starting FinOps analysis on project: {project_id}...")
+    print(f"Target topic: {topic_path}\n")
     
     subscriber = pubsub_v1.SubscriberClient()
     project_path = f"projects/{project_id}"
     
-    # 1. Listar todas las suscripciones del proyecto
-    suscripciones = []
+    # 1. List all subscriptions for the given topic
+    subscriptions = []
     try:
         for subscription in subscriber.list_subscriptions(project=project_path):
             if subscription.topic == topic_path:
-                suscripciones.append(subscription)
+                subscriptions.append(subscription)
     except Exception as e:
-        print(f"Error al listar suscripciones: {e}")
+        print(f"Error listing subscriptions: {e}")
         return
 
-    total_suscripciones = len(suscripciones)
-    if total_suscripciones == 0:
-        print("No se encontraron suscripciones asociadas a este tema.")
+    total_subscriptions = len(subscriptions)
+    if total_subscriptions == 0:
+        print("No subscriptions were found for this topic")
         return
         
-    print(f"Se encontraron {total_suscripciones} suscripciones apuntando a este tema.")
+    print(f"Found {total_subscriptions} subscriptions pointing to this topic.")
     print("-" * 80)
     
-    limite_tiempo_huerfana = datetime.now(timezone.utc) - timedelta(days=1) # 24 horas de antigüedad
-    suscripciones_huerfanas = 0
-    suscripciones_activas = 0
-    total_bytes_retenidos = 0
-    total_mensajes_sin_confirmar = 0
+    orphan_time_limit = datetime.now(timezone.utc) - timedelta(days=1) # 24 hours old
+    orphan_subscriptions = 0
+    active_subscriptions = 0
+    total_bytes_retained = 0
+    total_unacknowledged_messages = 0
     
-    # Inicializar cliente de monitoreo para extraer métricas de uso de cada una
+    # Initialize monitoring client to extract usage metrics for each one
     metric_client = monitoring_v3.MetricServiceClient()
     
-    for sub in suscripciones:
+    for sub in subscriptions:
         sub_name = sub.name
-        # Extraer metadatos básicos de la suscripción
-        # Intentamos obtener información de su tiempo de vida / inactividad
-        es_huerfana = False
+        # Extract basic subscription metadata
+        # We try to get information about its lifetime / inactivity
+        is_orphan = False
         
-        # Consultar métricas de la suscripción (Mensajes sin confirmar y antigüedad)
+        # Query subscription metrics (Unacknowledged messages and age)
         interval = monitoring_v3.TimeInterval({
             "end_time": {"seconds": int(datetime.now(timezone.utc).timestamp())},
             "start_time": {"seconds": int((datetime.now(timezone.utc) - timedelta(minutes=10)).timestamp())}
         })
         
-        # Filtro para obtener el backlog de bytes sin confirmar de esta suscripción específica
+        # Filter to get the backlog of unacknowledged bytes for this specific subscription
         sub_id = sub_name.split("/")[-1]
         filter_str = (
             f'metric.type = "pubsub.googleapis.com/subscription/num_unacknowledged_messages" '
@@ -64,42 +64,42 @@ def analizar_suscripciones_finops(project_id, topic_path):
                 view=monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL
             )
             
-            mensajes_sin_ack = 0
+            unacknowledged_messages = 0
             for result in results:
                 for point in result.points:
-                    mensajes_sin_ack = max(mensajes_sin_ack, point.value.int64_value)
+                    unacknowledged_messages = max(unacknowledged_messages, point.value.int64_value)
                     
-            if mensajes_sin_ack > 1000: # Si tiene un backlog acumulado persistente sin leer
-                es_huerfana = True
-                suscripciones_huerfanas += 1
-                total_mensajes_sin_confirmar += mensajes_sin_ack
+            if unacknowledged_messages > 1000: # If it has a persistent accumulated backlog unread
+                is_orphan = True
+                orphan_subscriptions += 1
+                total_unacknowledged_messages += unacknowledged_messages
             else:
-                suscripciones_activas += 1
+                active_subscriptions += 1
                 
         except Exception:
-            # Si hay restricción de métricas, lo clasificamos por antigüedad temporal de la suscripción
-            suscripciones_huerfanas += 1
+            # If there is a metrics restriction, we classify it by temporal age of the subscription
+            orphan_subscriptions += 1
 
-    # Cálculos de Porcentajes
-    porcentaje_huerfanas = (suscripciones_huerfanas / total_suscripciones) * 100
-    porcentaje_activas = (suscripciones_activas / total_suscripciones) * 100
+    # Percentage calculations
+    orphan_percentage = (orphan_subscriptions / total_subscriptions) * 100
+    active_percentage = (active_subscriptions / total_subscriptions) * 100
     
-    # Impresión de resultados cuantitativos
-    print("\n=== REPORTE FINOPS DE RESPALDO (PREGUNTA 2) ===")
-    print(f"Total de suscripciones analizadas: {total_suscripciones}")
-    print(f"Suscripciones Huérfanas detectadas: {suscripciones_huerfanas} ({porcentaje_huerfanas:.2f}%)")
-    print(f"Suscripciones Activas saludables:  {suscripciones_activas} ({porcentaje_activas:.2f}%)")
+    # Print quantitative results
+    print("\n=== FINOPS BACKUP REPORT (QUESTION 2) ===")
+    print(f"Total subscriptions analyzed: {total_subscriptions}")
+    print(f"Orphan subscriptions detected: {orphan_subscriptions} ({orphan_percentage:.2f}%)")
+    print(f"Healthy active subscriptions:  {active_subscriptions} ({active_percentage:.2f}%)")
     print("-" * 80)
-    print(f"Estimación de mensajes retenidos en colas huérfanas: {total_mensajes_sin_confirmar:,} mensajes")
+    print(f"Estimated retained messages in orphan queues: {total_unacknowledged_messages:,} messages")
     print("-" * 80)
     
-    if porcentaje_huerfanas > 80:
-        print("ALERTA DE OPTIMIZACIÓN: El porcentaje de recursos huérfanos es CRÍTICO.")
-        print("Se recomienda aplicar políticas de expiración automática (Expiration Policies) cortas de 1 día.")
+    if orphan_percentage > 80:
+        print("OPTIMIZATION ALERT: The percentage of orphan resources is CRITICAL.")
+        print("It is recommended to apply short automatic expiration policies (Expiration Policies) of 1 day.")
     else:
-        print("El estado de los recursos es saludable.")
+        print("The state of resources is healthy.")
 
 if __name__ == "__main__":
-    ID_PROYECTO = "apache-beam-testing"
-    TEMA = "projects/pubsub-public-data/topics/taxirides-realtime"
-    analizar_suscripciones_finops(ID_PROYECTO, TEMA)
+    PROJECT_ID = "apache-beam-testing"
+    TOPIC = "projects/pubsub-public-data/topics/taxirides-realtime"
+    analyze_subscriptions_finops(PROJECT_ID, TOPIC)
