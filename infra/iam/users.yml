@@ -1003,6 +1003,11 @@
   - role: roles/iam.serviceAccountAdmin
   - role: roles/resourcemanager.projectIamAdmin
   - role: roles/tpu.admin
+- username: test-user
+  email: test-usar@gmail.com
+  member_type: user
+  permissions:
+  - role: roles/beam_viewer
 - username: tf-test-dataflow-egyosq0h66-0
   email: tf-test-dataflow-egyosq0h66-0@apache-beam-testing.iam.gserviceaccount.com
   member_type: serviceAccount
