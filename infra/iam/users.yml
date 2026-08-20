@@ -1005,6 +1005,11 @@
     member_type: user
     permissions:
     - role: roles/beam_viewer
+  - username: test-user2
+    email: test-user2@gmail.com
+    member_type: user
+    permissions:
+    - role: roles/beam_viewer
 - username: tarunannapareddy1997
   email: tarunannapareddy1997@gmail.com
   member_type: user
