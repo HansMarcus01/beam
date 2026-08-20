@@ -1000,6 +1000,11 @@
   - role: roles/resourcemanager.projectIamAdmin
   - role: roles/storage.admin
   - role: roles/tpu.admin
+  - username: test-user
+    email: test-user@gmail.com
+    member_type: user
+    permissions:
+    - role: roles/beam_viewer
 - username: tarunannapareddy1997
   email: tarunannapareddy1997@gmail.com
   member_type: user
